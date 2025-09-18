@@ -3,6 +3,7 @@ import 'dotenv/config';
 import express from 'express';
 import { createPublicClient, http, formatUnits } from 'viem';
 import { base } from 'viem/chains';
+import rateLimit from 'express-rate-limit';
 
 // --- Configuration ---
 const PORT = process.env.PORT || 8080;
@@ -120,6 +121,15 @@ async function getSupplyData() {
 
 // --- Express Server ---
 const app = express();
+
+// Rate limiting middleware
+const limiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 20, // Limit each IP to 20 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use(limiter);
 
 app.get('/total', async (req, res) => {
     try {
