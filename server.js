@@ -47,9 +47,11 @@ const BURN_ADDRESSES = [
 
 // IMPORTANT: Add your team, vesting, and treasury addresses here
 const LOCKED_ADDRESSES = [
-    // '0xYourTeamAddress1...',
-    // '0xYourVestingContract...',
-    // '0xYourTreasuryAddress...'
+    '0xe2326bB154053cF3A96BC3484e9f2c4D12cA445F', // KOLS
+    '0x15FecCC979828DE7aF82ec1f4672d519cF1b7F09', // Teams
+    '0xCA5996B9447c092458D46eb143b8E9c332F65C76', // Marketing
+    '0x750FF2F710FbB1Aa08E4C69e0F96Ea4b39eA2299', // Rewards
+    '0xb5d78dd3276325f5faf3106cc4acc56e28e0fe3b', // Sablier (Teams)
 ];
 
 // --- Viem Client ---
@@ -94,6 +96,7 @@ async function getSupplyData() {
         args: [address],
     }));
 
+
     const balancesBI = await client.multicall({
         contracts: balanceOfCalls,
         allowFailure: false,
@@ -103,6 +106,7 @@ async function getSupplyData() {
 
     const totalSupply = parseFloat(formatUnits(totalSupplyBI, decimals));
     const totalLocked = parseFloat(formatUnits(totalLockedBI, decimals));
+
     const circulatingSupply = totalSupply - totalLocked;
 
     const data = {
