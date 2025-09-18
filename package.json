@@ -1,6 +1,6 @@
 {
     "name": "clones-supply-api",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "API to provide CLONES token supply information for crypto aggregators.",
     "main": "server.js",
     "type": "module",
