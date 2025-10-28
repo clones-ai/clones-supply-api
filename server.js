@@ -4,6 +4,7 @@ import express from 'express';
 import { createPublicClient, http, formatUnits } from 'viem';
 import { base } from 'viem/chains';
 import rateLimit from 'express-rate-limit';
+import { timingSafeEqual } from 'crypto';
 
 // --- Configuration ---
 const PORT = process.env.PORT || 8080;
@@ -83,6 +84,21 @@ const TOKEN_MAPPINGS = {
     'CLONES': 'clones'
 };
 
+// Pre-computed coin IDs string for CoinGecko API (deduplicated)
+const COIN_IDS = [...new Set(Object.values(TOKEN_MAPPINGS))].join(',');
+
+// Constant-time string comparison to prevent timing attacks
+function isValidApiKey(provided, expected) {
+    if (!provided || !expected) return false;
+    if (provided.length !== expected.length) return false;
+    
+    try {
+        return timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+    } catch {
+        return false;
+    }
+}
+
 // --- Supply Calculation Logic ---
 async function getSupplyData() {
     const now = Date.now();
@@ -149,9 +165,8 @@ async function getPriceData() {
     console.log('Fetching fresh price data from CoinGecko...');
 
     try {
-        const coinIds = Object.values(TOKEN_MAPPINGS).join(',');
         const response = await fetch(
-            `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd`
+            `https://api.coingecko.com/api/v3/simple/price?ids=${COIN_IDS}&vs_currencies=usd`
         );
 
         if (!response.ok) {
@@ -201,14 +216,14 @@ const priceSecurityMiddleware = (req, res, next) => {
     }
 
     // In production, check for API key
-    const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+    const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace(/^bearer\s+/i, '');
     
     if (!API_KEY) {
         console.warn('API_KEY not configured, allowing request');
         return next();
     }
 
-    if (!apiKey || apiKey !== API_KEY) {
+    if (!apiKey || !isValidApiKey(apiKey, API_KEY)) {
         return res.status(401).json({ error: 'Unauthorized: Invalid or missing API key' });
     }
 
@@ -280,7 +295,7 @@ app.get('/price/:symbol', priceSecurityMiddleware, async (req, res) => {
         }
 
         res.setHeader('Content-Type', 'text/plain');
-        res.setHeader('Cache-Control', 'public, max-age=60'); // 1-minute browser cache
+        res.setHeader('Cache-Control', NODE_ENV === 'production' ? 'private, max-age=60' : 'public, max-age=60');
         res.send(price.toString());
     } catch (error) {
         console.error(`Error fetching ${req.params.symbol} price:`, error);
@@ -291,7 +306,7 @@ app.get('/price/:symbol', priceSecurityMiddleware, async (req, res) => {
 app.get('/prices', priceSecurityMiddleware, async (req, res) => {
     try {
         const data = await getPriceData();
-        res.setHeader('Cache-Control', 'public, max-age=60'); // 1-minute browser cache
+        res.setHeader('Cache-Control', NODE_ENV === 'production' ? 'private, max-age=60' : 'public, max-age=60');
         res.json(data);
     } catch (error) {
         console.error('Error fetching price data:', error);
