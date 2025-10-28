@@ -1,8 +1,8 @@
 # Clones Supply API
 
-This project provides a simple, public API to query the total and circulating supply of the CLONES token on the Base blockchain. It is designed to be used by crypto-asset aggregators and data platforms that require a stable, unauthenticated endpoint for token metrics.
+This project provides a simple API to query the total and circulating supply of the CLONES token on the Base blockchain, as well as cached price data for multiple tokens (ETH, WETH, USDC, CLONES) from CoinGecko. It is designed to be used by crypto-asset aggregators and data platforms that require stable endpoints for token metrics.
 
-The server is built with Node.js and Express, uses `viem` for blockchain interaction, and is configured for easy deployment on [Fly.io](https://fly.io/).
+The server is built with Node.js and Express, uses `viem` for blockchain interaction, includes CoinGecko integration with intelligent caching, and is configured for easy deployment on [Fly.io](https://fly.io/).
 
 ## Prerequisites
 
@@ -29,9 +29,11 @@ The server is built with Node.js and Express, uses `viem` for blockchain interac
     ```bash
     cp .env.example .env
     ```
-    Then, edit `.env` and add your Base RPC URL:
+    Then, edit `.env` and configure the required variables:
     ```
     BASE_RPC_URL="https://your-base-mainnet-rpc-url.com"
+    API_KEY="your-secret-api-key"  # Optional, for production security
+    NODE_ENV="development"          # Set to "production" in production
     ```
 
 4.  **Configure Locked Addresses:**
@@ -50,6 +52,8 @@ The server is built with Node.js and Express, uses `viem` for blockchain interac
 
 ## API Endpoints
 
+### Supply Endpoints (Public)
+
 -   `GET /total`
     Returns the total supply of the CLONES token as a plain text number.
     
@@ -66,8 +70,56 @@ The server is built with Node.js and Express, uses `viem` for blockchain interac
       "updated_at": "2025-09-18T10:00:00.000Z"
     }
     ```
+
+### Price Endpoints (Secured in Production)
+
+-   `GET /price/:symbol`
+    Returns the current USD price for a specific token as plain text.
+    Supported symbols: `ETH`, `WETH`, `USDC`, `CLONES`
+    
+    Example: `GET /price/eth` → `3975.26`
+
+-   `GET /prices`
+    Returns USD prices for all supported tokens:
+    ```json
+    {
+      "prices": {
+        "ETH": 3975.26,
+        "WETH": 3975.26,
+        "USDC": 0.999877,
+        "CLONES": 0.00032924
+      },
+      "updated_at": "2025-10-28T20:53:52.323Z"
+    }
+    ```
+
+### Utility Endpoints
+
 -   `GET /health`
     A simple health check endpoint that returns `OK` with a status code of `200`. Used by Fly.io for monitoring.
+
+## Security
+
+### Development Mode
+In development (`NODE_ENV=development`), all endpoints are publicly accessible.
+
+### Production Mode
+In production (`NODE_ENV=production`), price endpoints require authentication:
+- Supply endpoints remain public
+- Price endpoints require an `X-API-Key` header or `Authorization: Bearer <token>` header
+- Set the `API_KEY` environment variable to enable authentication
+
+Example authenticated request:
+```bash
+curl -H "X-API-Key: your-secret-key" https://your-api.fly.dev/price/eth
+```
+
+## Caching
+
+All data is cached for 30 minutes to optimize performance and reduce external API calls:
+- Supply data is fetched from the Base blockchain
+- Price data is fetched from CoinGecko API
+- Cache is warmed up automatically on server startup
 
 ## Deployment to Fly.io
 
@@ -83,10 +135,12 @@ The server is built with Node.js and Express, uses `viem` for blockchain interac
     ```
     *Review the settings in the generated `fly.toml` file. The provided file should be a good starting point.*
 
-3.  **Set the RPC secret:**
-    Your `BASE_RPC_URL` is a secret and should not be committed to git. Set it on Fly.io using:
+3.  **Set the secrets:**
+    Your sensitive environment variables should not be committed to git. Set them on Fly.io using:
     ```bash
     fly secrets set BASE_RPC_URL="https://your-base-mainnet-rpc-url.com"
+    fly secrets set API_KEY="your-production-api-key"
+    fly secrets set NODE_ENV="production"
     ```
 
 4.  **Deploy the application:**
