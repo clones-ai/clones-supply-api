@@ -16,6 +16,10 @@ if (!RPC_URL) {
     throw new Error('BASE_RPC_URL is not defined in the environment variables.');
 }
 
+if (NODE_ENV === 'production' && !API_KEY) {
+    throw new Error('API_KEY is required in production environment for securing price endpoints.');
+}
+
 const CLONES_CONTRACT_ADDRESS = '0xaadd98Ad4660008C917C6FE7286Bc54b2eEF894d';
 
 // A minimal ERC20 ABI to get totalSupply, decimals, and balanceOf
@@ -87,9 +91,22 @@ const TOKEN_MAPPINGS = {
 // Pre-computed coin IDs string for CoinGecko API (deduplicated)
 const COIN_IDS = [...new Set(Object.values(TOKEN_MAPPINGS))].join(',');
 
-// Constant-time string comparison to prevent timing attacks
+/**
+ * Validates an API key using constant-time comparison to prevent timing attacks.
+ * 
+ * Regular string comparison (===) can leak information about the correct API key
+ * through timing differences. Attackers can measure response times to determine
+ * how many characters match, gradually discovering the key character by character.
+ * 
+ * This function uses crypto.timingSafeEqual() which compares buffers in constant
+ * time regardless of where differences occur, preventing timing-based attacks.
+ * 
+ * @param {string} provided - The API key provided by the client
+ * @param {string} expected - The expected API key from environment variables
+ * @returns {boolean} True if keys match exactly, false otherwise
+ */
 function isValidApiKey(provided, expected) {
-    if (!provided || !expected) return false;
+    if (!provided) return false;
     if (provided.length !== expected.length) return false;
     
     try {
@@ -216,12 +233,14 @@ const priceSecurityMiddleware = (req, res, next) => {
     }
 
     // In production, check for API key
-    const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace(/^bearer\s+/i, '');
-    
-    if (!API_KEY) {
-        console.warn('API_KEY not configured, allowing request');
-        return next();
+    const authHeader = req.headers['authorization'];
+    let bearerToken = null;
+    if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+        bearerToken = authHeader.slice(7); // Remove 'Bearer ' (7 characters)
     }
+    const apiKey = req.headers['x-api-key'] || bearerToken;
+    
+    // API_KEY is guaranteed to exist in production due to startup check
 
     if (!apiKey || !isValidApiKey(apiKey, API_KEY)) {
         return res.status(401).json({ error: 'Unauthorized: Invalid or missing API key' });
